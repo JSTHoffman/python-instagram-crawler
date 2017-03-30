@@ -1,0 +1,14 @@
+*.pyc
+*.csv
+*.txt
+*.xlsx
+*.xls
+
+dist/
+build/
+*.egg-info/
+
+.tox/
+.coverage
+.DS_Store
+.idea
