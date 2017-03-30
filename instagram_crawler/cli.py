@@ -44,6 +44,11 @@ def main(procs):
         column_map = json.load(json_file)
     json_file.close()
 
+    # ADD PHANTOMJS EXECUTABLE TO PATH
+    if 'phantomjs' not in os.environ['PATH']:
+        print('adding phantomjs executable to PATH...')
+        os.environ['PATH'] += ':{0}/bin'.format(os.getcwd())
+
     # CREATE PHANTOMJS WEBDRIVER
     driver = get_driver()
 
@@ -121,7 +126,6 @@ def user_input():
 def get_driver():
     print('creating webdriver...')
     driver = webdriver.PhantomJS(
-        executable_path='phantomjs',
         service_log_path=os.path.devnull,
         service_args=[
             '--ignore-ssl-errors=true',
