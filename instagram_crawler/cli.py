@@ -53,12 +53,8 @@ def main(procs):
     driver = get_driver()
 
     for username in usernames:
-        print(
-            '\ncrawling {0}\'s account'
-            .format(username)
-        )
-
         try:
+            # START CRAWLER FOR PROFILE
             posts = post_crawler.crawl(
                 driver=driver,
                 username=username,
@@ -68,20 +64,19 @@ def main(procs):
                 procs=procs
             )
 
-            print(
-                '\npulled {0} posts for {1}!'
-                .format(len(posts), username)
-            )
-
+            # CONVERT DICT TO PANDAS DF AND APPEND TO FINAL
             transformed_df = pd.DataFrame.from_dict(posts)
             final = final.append(transformed_df)
 
-        except Exception:
-            print(traceback.format_exc())
+        except Exception as e:
+            # HANDLE EXCEPTION BY GIVING USER OPTION TO
+            # SEE STACK TRACE AND CONTINUE OR NOT
+            handle_exception(e, username)
 
-    # WRITE OUT FINAL CSV FILE
+    # WRITE OUT FINAL CSV FILE FROM DATAFRAME
     final.to_csv('output/{0}.csv'.format(args['out_file']), index=False)
 
+    # END PHANTOMJS PROCESS AND CLOSE DRIVER
     driver.service.process.send_signal(signal.SIGTERM)
     driver.quit()
 
@@ -136,7 +131,15 @@ def get_driver():
 
 
 def get_accounts(path, column):
-    print('loading accounts...')
+    print('\nloading accounts...')
     accounts = pd.read_csv(path)
     accounts = accounts[column].tolist()
     return accounts
+
+
+def handle_exception(error, username):
+    print('Error crawling {0}\'s profile: {1}'
+        .format(username, error.message))
+    if click.confirm('would you like to see the stack trace?'):
+        print(traceback.format_exc(error))
+    click.confirm('Do you want to continue?', abort=True)
