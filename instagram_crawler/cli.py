@@ -84,11 +84,19 @@ def main(procs):
 def user_input():
     inputs = {}
 
-    # GET ACCOUNTS FILE PATH
-    inputs['input_file'] = click.prompt(
-        'Where is your accounts file located? >> ',
-        type=str
-    )
+    found_file = False
+    while not found_file:
+        # GET ACCOUNTS FILE PATH
+        inputs['input_file'] = click.prompt(
+            'Where is your accounts file located? >> ',
+            type=str
+        )
+
+        # CHECK THAT FILE EXISTS
+        if os.path.exists(inputs['input_file']):
+            found_file = True
+        else:
+            print('Sorry, that file couldn\'t be found.\n')
 
     # GET COLUMN NAME WITH USERNAMES
     inputs['column_name'] = click.prompt(
