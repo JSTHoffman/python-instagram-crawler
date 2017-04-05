@@ -40,7 +40,12 @@ def main(procs):
     )
 
     # LOAD COLUMN MAP
-    with open('instagram_crawler/column_map.json') as json_file:
+    home_directory = os.path.expanduser('~')
+    map_path = '{0}/apps/cli_tools/python-instagram-crawler/' \
+                'instagram_crawler/column_map.json'
+    map_path = map_path.format(home_directory)
+
+    with open(map_path) as json_file:
         column_map = json.load(json_file)
     json_file.close()
 
@@ -74,7 +79,9 @@ def main(procs):
             handle_exception(e, username)
 
     # WRITE OUT FINAL CSV FILE FROM DATAFRAME
-    final.to_csv('output/{0}.csv'.format(args['out_file']), index=False)
+    out_path = '{0}/apps/cli_tools/python-instagram-crawler/output/{1}.csv'
+    out_path = out_path.format(home_directory, args['out_file'])
+    final.to_csv(out_path, index=False)
 
     # END PHANTOMJS PROCESS AND CLOSE DRIVER
     driver.service.process.send_signal(signal.SIGTERM)
