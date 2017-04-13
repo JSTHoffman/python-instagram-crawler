@@ -76,10 +76,18 @@ def get_post_urls(driver, username, start_date, json_obj):
     # CLICK LOAD MORE BUTTON IF > 12 POSTS
     if post_count > 12:
         driver.implicitly_wait(1)
-        load_more = driver.find_element_by_xpath(
-            '//a[contains(text(), "Load more")]'
-        )
-        load_more.click()
+
+        # TRY TO FIND LOAD MORE BUTTON
+        # (WILL NOT BE PRESENT FOR NEWER ACCOUNTS)
+        try:
+            load_more = driver.find_element_by_xpath(
+                '//a[contains(text(), "Load more")]'
+            )
+            load_more.click()
+
+        # CONTINUE IF LOAD MORE BUTTON IS NOT FOUND
+        except driver.NoSuchElementException:
+            pass
 
         # SCROLL THE PAGE TO LOAD MORE POSTS
         # UNTIL OLDEST NEEDED POST IS FOUND
