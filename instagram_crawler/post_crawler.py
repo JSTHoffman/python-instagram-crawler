@@ -8,6 +8,7 @@ import time
 import json
 import re
 
+from selenium.common.exceptions import NoSuchElementException
 from bs4 import BeautifulSoup
 import requests
 
@@ -86,7 +87,7 @@ def get_post_urls(driver, username, start_date, json_obj):
             load_more.click()
 
         # CONTINUE IF LOAD MORE BUTTON IS NOT FOUND
-        except driver.NoSuchElementException:
+        except NoSuchElementException:
             pass
 
         # SCROLL THE PAGE TO LOAD MORE POSTS
