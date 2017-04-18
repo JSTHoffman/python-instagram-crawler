@@ -134,7 +134,7 @@ def check_post_date(driver, flag, start_date, post_count):
 
     # GRAB POST DATE AND CHECK TO SEE IF MORE IMAGES NEED TO BE LOADED
     post_date = dt.datetime.fromtimestamp(
-        raw_post['entry_data']['PostPage'][0]['media']['date']
+        raw_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']['taken_at_timestamp']
     )
     if post_date.date() < start_date.date():
         flag = True
@@ -195,19 +195,19 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
             raw_post = json.loads(sharedData[sharedData.find('{'):sharedData.rfind('}') + 1])
 
             # POST INFO LOCATED IN THE MEDIA OBJECT IN SHARED DATA
-            raw_post = raw_post['entry_data']['PostPage'][0]['media']
-            post_date = dt.datetime.fromtimestamp(raw_post['date'])
+            raw_post = raw_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']
+            post_date = dt.datetime.fromtimestamp(raw_post['taken_at_timestamp'])
 
             # TRANSFORM DATA IF POST DATE WITHIN RANGE
             if post_date.date() >= start_date.date() and post_date.date() <= end_date.date():
                 # CREATE EMPTY POST OBJECT AND PARSE VALUES FROM RAW DATA
                 transformed_post = dict((key, None) for key in column_map)
                 transformed_post['channel'] = 'instagram'
-                transformed_post['post_id'] = raw_post['code']
-                transformed_post['likes'] = raw_post['likes']['count']
-                transformed_post['comments'] = raw_post['comments']['count']
+                transformed_post['post_id'] = raw_post['shortcode']
+                transformed_post['likes'] = raw_post['edge_media_preview_like']['count']
+                transformed_post['comments'] = raw_post['edge_media_to_comment']['count']
                 transformed_post['username'] = raw_post['owner']['username']
-                transformed_post['image'] = raw_post['display_src']
+                transformed_post['image'] = raw_post['display_url']
                 transformed_post['url'] = url
                 transformed_post['publish_date'] = post_date.strftime('%Y-%m-%d %H:%M:%S')
                 transformed_post['is_ad'] = raw_post['is_ad']
@@ -218,21 +218,22 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                 # ARE NOT ALWAYS PRESENT IN THE RAW DATA
                 if 'usertags' in raw_post:
                     tags = []
-                    for item in raw_post['usertags']['nodes']:
-                        tags.append(item['user']['username'])
+                    for item in raw_post['edge_media_to_tagged_user']['edges']:
+                        tags.append(item['node']['user']['username'])
                     transformed_post['user_tags'] = ', '.join(tags)
 
                 if 'caption' in raw_post:
-                    caption = raw_post['caption'].encode('ascii', 'ignore')
+                    caption = raw_post['edge_media_to_caption']['edges'][0]['node']['text']
+                    caption = caption.encode('ascii', 'ignore')
                     transformed_post['caption'] = caption.strip(' ')
 
                 if raw_post['location'] != None:
                     location = raw_post['location']['name']
                     transformed_post['location'] = location.encode('utf-8')
 
-                if transformed_post['is_video'] == True:
-                    if 'video_views' in raw_post:
-                        transformed_post['video_views'] = raw_post['video_views']
+                if transformed_post['is_video']:
+                    if 'video_view_count' in raw_post:
+                        transformed_post['video_views'] = raw_post['video_view_count']
                 array.append(fill_none(transformed_post))
 
         except Exception:
