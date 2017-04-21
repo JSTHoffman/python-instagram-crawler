@@ -216,18 +216,18 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
 
                 # USERTAGS, CAPTION, LOCATION, AND VIDEO VIEWS
                 # ARE NOT ALWAYS PRESENT IN THE RAW DATA
-                if 'usertags' in raw_post:
+                if 'edge_media_to_tagged_user' in raw_post:
                     tags = []
                     for item in raw_post['edge_media_to_tagged_user']['edges']:
                         tags.append(item['node']['user']['username'])
                     transformed_post['user_tags'] = ', '.join(tags)
 
-                if 'caption' in raw_post:
+                if len(raw_post['edge_media_to_caption']['edges']):
                     caption = raw_post['edge_media_to_caption']['edges'][0]['node']['text']
                     caption = caption.encode('ascii', 'ignore')
                     transformed_post['caption'] = caption.strip(' ')
 
-                if raw_post['location'] != None:
+                if raw_post['location']:
                     location = raw_post['location']['name']
                     transformed_post['location'] = location.encode('utf-8')
 
