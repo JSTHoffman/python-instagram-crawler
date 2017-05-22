@@ -78,10 +78,17 @@ def main(procs):
             # SEE STACK TRACE AND CONTINUE OR NOT
             handle_exception(e, username)
 
-    # WRITE OUT FINAL CSV FILE FROM DATAFRAME
-    out_path = '{0}/apps/cli_tools/python-instagram-crawler/output/{1}.csv'
-    out_path = out_path.format(home_directory, args['out_file'])
+    # GENERATE FILE PATH AND WRITE OUTPUT
+    # FILE TO SAME DIRECTORY AS INPUT FILE
+    out_path = args['input_file'][:args['input_file'].rfind('/')]
+    out_path = '{0}/{1}{2}'.format(
+        out_path,
+        args['out_file'].strip('.csv'),
+        '.csv'
+    )
     final.to_csv(out_path, index=False)
+
+    print('\ndone!\noutput file: {0}'.format(out_path))
 
     # END PHANTOMJS PROCESS AND CLOSE DRIVER
     driver.service.process.send_signal(signal.SIGTERM)
