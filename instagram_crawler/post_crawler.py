@@ -114,7 +114,7 @@ def get_post_urls(driver, username, start_date, json_obj):
 def check_post_date(driver, flag, start_date, post_count):
     # PARSE HTML FOR ROWS OF POSTS CURRENTLY DISPLAYED
     soup = BeautifulSoup(driver.page_source.encode('utf-8'), 'html.parser')
-    post_rows = driver.find_elements_by_class_name('_myci9')
+    post_rows = driver.find_elements_by_class_name('_70iju')
 
     # 3 POSTS PER ROW: IF ROWS x 3 > POST COUNT
     # THEN THERE ALL THE POSTS ARE DISPLAYED

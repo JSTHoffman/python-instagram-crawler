@@ -161,7 +161,7 @@ def get_accounts(path, column):
 
 def handle_exception(error, username):
     print('Error crawling {0}\'s profile: {1}'
-        .format(username, error.message))
+          .format(username, error.message))
     if click.confirm('would you like to see the stack trace?'):
         print(traceback.format_exc(error))
     click.confirm('Do you want to continue?', abort=True)
