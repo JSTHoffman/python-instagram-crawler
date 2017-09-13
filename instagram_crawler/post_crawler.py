@@ -4,8 +4,6 @@ from multiprocessing import Process
 from multiprocessing import Manager
 import datetime as dt
 import traceback
-import signal
-import time
 import json
 import re
 import os
@@ -134,18 +132,21 @@ def get_post_urls(driver, start_date, shared_data):
 def check_post_date(post_url):
     # CREATE NEW DRIVER TO LOAD POST PAGE
     new_driver = get_driver()
-    new_driver.get(post_url)
 
-    # GET THE SHARED DATA OBJECT WITH POST INFO
-    shared_data = new_driver.execute_script(
-        'return window._sharedData;'
-    )
+    try:
+        new_driver.get(post_url)
 
-    # END PHANTOMJS PROCESS AND CLOSE NEW DRIVER
-    new_driver.service.process.send_signal(signal.SIGTERM)
-    time.sleep(2)
-    new_driver.quit()
-    return shared_data
+        # GET THE SHARED DATA OBJECT WITH POST INFO
+        shared_data = new_driver.execute_script(
+            'return window._sharedData;'
+        )
+        # CLOSE DRIVER
+        new_driver.quit()
+        return shared_data
+
+    except Exception as e:
+        new_driver.quit()
+        raise e
 
 
 def chunk_transform(post_urls, start_date, end_date, column_map, num_processes):

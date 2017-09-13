@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import traceback
-import signal
 import json
 import os
 
@@ -89,7 +88,7 @@ def main(usernames, procs):
         except Exception as e:
             # HANDLE EXCEPTION BY GIVING USER OPTION TO
             # SEE STACK TRACE AND CONTINUE OR NOT
-            handle_exception(e, username)
+            handle_exception(e, username, driver)
 
     # GENERATE FILE PATH AND WRITE OUTPUT
     # FILE TO SAME DIRECTORY AS INPUT FILE
@@ -99,11 +98,9 @@ def main(usernames, procs):
         '.csv'
     )
     final.to_csv(out_file, index=False)
-
     print('\ndone!\noutput file: {0}'.format(out_file))
 
-    # END PHANTOMJS PROCESS AND CLOSE DRIVER
-    driver.service.process.send_signal(signal.SIGTERM)
+    # CLOSE DRIVER
     driver.quit()
 
 
@@ -177,9 +174,17 @@ def get_accounts(path, column):
     return accounts
 
 
-def handle_exception(error, username):
+def handle_exception(error, username, driver):
     print('Error crawling {0}\'s profile: {1}'
           .format(username, error.message))
+
+    # SHOW TRACEBACK IF USER CHOOSES
     if click.confirm('would you like to see the stack trace?'):
         print(traceback.format_exc(error))
-    click.confirm('Do you want to continue?', abort=True)
+
+    # CONTINUE IF USER CHOOSES, OTHERWISE CLOSE DRIVER
+    if click.confirm('Do you want to continue?', abort=True):
+        pass
+    else:
+        # CLOSE DRIVER BEFORE EXITING
+        driver.quit()
