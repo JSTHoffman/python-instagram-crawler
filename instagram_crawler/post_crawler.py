@@ -239,11 +239,17 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
 def get_post(post_url):
     '''loads a post page and gets the
     sharedData object with post info'''
-    response = requests.get(post_url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    script = soup.find('script', text=re.compile('window._sharedData')).text
-    shared_data = json.loads(re.search(r'{.*}', script).group(0))
-    return shared_data
+    retries = 0
+    while retries < 5:
+        try:
+            response = requests.get(post_url)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            script = soup.find('script', text=re.compile('window._sharedData')).text
+            shared_data = json.loads(re.search(r'{.*}', script).group(0))
+            return shared_data
+        except Exception as e:
+            print('error loading post: {0}\nretrying...'.format(post_url))
+    raise Exception('retires exceeded loading post')
 
 
 def fill_none(transformed_post):
