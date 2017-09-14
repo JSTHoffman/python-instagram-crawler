@@ -92,9 +92,14 @@ def main(usernames, procs):
 
     # GENERATE FILE PATH AND WRITE OUTPUT
     # FILE TO SAME DIRECTORY AS INPUT FILE
+    # (USE CRAWLER OUTPUT DIRECTORY IF NO INPUT FILE IS USED)
+    file_name = (args['out_file'][:args['out_file'].rfind('.csv')]
+                 if '.csv' in args['out_file']
+                 else args['out_file'])
+
     out_file = '{0}/{1}{2}'.format(
         out_path,
-        args['out_file'].strip('.csv'),
+        file_name,
         '.csv'
     )
     final.to_csv(out_file, index=False)

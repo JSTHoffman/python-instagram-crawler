@@ -18,7 +18,7 @@ import requests
 
 
 class CheckRowCount(object):
-    '''defines the webdriver wait condition: that the new
+    '''defines the webdriver wait condition: the new
     row count must be greater than the old row count'''
 
     def __init__(self, locator, row_count):
@@ -32,6 +32,7 @@ class CheckRowCount(object):
 
 
 def crawl(driver, username, start_date, end_date, column_map, procs):
+    '''handler function for crawling an instagram profile'''
     print('\ncrawling {0}\'s profile'.format(username))
 
     # CHECK PROFILE INFO
@@ -61,6 +62,8 @@ def crawl(driver, username, start_date, end_date, column_map, procs):
 
 
 def get_post_urls(driver, start_date, shared_data):
+    '''collects URLs for posts on the profile page
+    with post dates later than start_date'''
     print('retrieving post URLs...')
 
     # GET POST COUNT FROM PROFILE INFO
@@ -100,7 +103,7 @@ def get_post_urls(driver, start_date, shared_data):
         # FOR THE LAST POST ON THE PAGE
         last_row = post_rows[-1].find_elements_by_tag_name('a')
         last_url = last_row[-1].get_attribute('href').encode('utf-8')
-        last_post = check_post_date(last_url)
+        last_post = get_post(last_url)
 
         # GRAB POST DATE AND CHECK TO SEE IF MORE IMAGES NEED TO BE LOADED
         post_date = dt.datetime.fromtimestamp(
@@ -129,27 +132,9 @@ def get_post_urls(driver, start_date, shared_data):
     return post_urls
 
 
-def check_post_date(post_url):
-    # CREATE NEW DRIVER TO LOAD POST PAGE
-    new_driver = get_driver()
-
-    try:
-        new_driver.get(post_url)
-
-        # GET THE SHARED DATA OBJECT WITH POST INFO
-        shared_data = new_driver.execute_script(
-            'return window._sharedData;'
-        )
-        # CLOSE DRIVER
-        new_driver.quit()
-        return shared_data
-
-    except Exception as e:
-        new_driver.quit()
-        raise e
-
-
 def chunk_transform(post_urls, start_date, end_date, column_map, num_processes):
+    '''splits post URLs into chunks to be processed in parallel'''
+
     # MULTIPROCESSING LIST OBJECT FOR COLLECTING
     # OUTPUT FROM MULTIPLE CONCURRENT PROCESSES
     transformed_posts = Manager().list()
@@ -191,20 +176,21 @@ def chunk_transform(post_urls, start_date, end_date, column_map, num_processes):
 
 
 def transform_posts(post_urls, array, start_date, end_date, column_map):
+    '''gets the sharedData object from a post page using get_post()
+    and transforms the raw data, appending it to the
+    multiprocessing manager list'''
+
     # GET TODAY'S DATE TO CALCULATE POST LIFETIME
     today = dt.datetime.now()
     for url in post_urls:
         try:
             print('scraping {0}...'.format(url), end='\r')
 
-            # PARSE HTML TO GET SHARED DATA OBJECT
-            response = requests.get(url)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            shared_data = soup.find('script', text=re.compile('window._sharedData')).text
-            raw_post = json.loads(shared_data[shared_data.find('{'):shared_data.rfind('}') + 1])
+            # GET SHARED DATA OBJECT FOR POST
+            shared_data = get_post(url)
 
             # POST INFO LOCATED IN THE MEDIA OBJECT IN SHARED DATA
-            raw_post = raw_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']
+            raw_post = shared_data['entry_data']['PostPage'][0]['graphql']['shortcode_media']
             post_date = dt.datetime.fromtimestamp(raw_post['taken_at_timestamp'])
 
             # TRANSFORM DATA IF POST DATE WITHIN RANGE
@@ -250,8 +236,18 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                   .format(url, traceback.format_exc()))
 
 
+def get_post(post_url):
+    '''loads a post page and gets the
+    sharedData object with post info'''
+    response = requests.get(post_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    script = soup.find('script', text=re.compile('window._sharedData')).text
+    shared_data = json.loads(re.search(r'{.*}', script).group(0))
+    return shared_data
+
+
 def fill_none(transformed_post):
-    # IN CASE FIELD IN RAW DATA CONTAINS EMPTY STRING
+    '''in case fields in the raw data contain empty strings'''
     for field in transformed_post:
         if transformed_post[field] == '':
             transformed_post[field] = None
@@ -259,7 +255,8 @@ def fill_none(transformed_post):
 
 
 def scroll(driver, count):
-    # SCROLL PAGE TO LOAD MORE PHOTOS
+    '''scrolls to the bottom of the page to
+    trigger the ajax request for more photos'''
     for i in range(count):
         # SCROLL TO BOTTOM OF PAGE
         driver.execute_script(
@@ -269,7 +266,8 @@ def scroll(driver, count):
 
 
 def get_chunk_size(post_num, num_processes):
-    # DIVIDE NUMBER OF POSTS BY NUMBER OF PROCESSES
+    '''determines the size of a chunk based on the number
+    of posts retrieved and the number of process used'''
     chunk_size = int(round(float(post_num) / num_processes))
     if chunk_size < 1:
         return 1
@@ -277,7 +275,7 @@ def get_chunk_size(post_num, num_processes):
 
 
 def get_driver():
-    # CREATE NEW DRIVER TO CHECK POST DATES
+    '''creates a new webdriver instance to check post dates'''
     driver = webdriver.PhantomJS(
         service_log_path=os.path.devnull,
         service_args=[
@@ -290,17 +288,15 @@ def get_driver():
 
 
 def check_profile(username, driver):
-    # PARSE HTML TO GET SHARED DATA OBJECT (CONTAINS PROFILE INFO)
+    '''gets the sharedData object from a
+    profile page and checks the is_private flag'''
+
+    # LOAD PROFILE PAGE AND GET SHARED DATA OBJECT
     driver.get('https://www.instagram.com/{0}'.format(username))
     shared_data = driver.execute_script(
         'return window._sharedData;'
     )
     # CHECK FOR PRIVATE PROFILE
-    check_private_profile(shared_data)
-    return shared_data
-
-
-def check_private_profile(data):
-    # CHECK PRIVATE PROFILE FLAG IN SHARED DATA OBJECT
-    if data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
+    if shared_data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
         raise Exception('PrivateProfileError')
+    return shared_data
