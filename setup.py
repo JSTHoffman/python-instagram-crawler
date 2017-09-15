@@ -4,7 +4,8 @@ Crawl public Instagram profiles to collect post data.
 from setuptools import find_packages, setup
 import os
 
-dependencies = ['click', 'selenium', 'bs4', 'pandas', 'requests']
+dependencies = ['click', 'selenium', 'bs4', 'pandas',
+                'requests', 'fake-useragent']
 
 # MAKE OUTPUT DIRECTORY IF NONE EXISTS
 if not os.path.isdir('./output'):

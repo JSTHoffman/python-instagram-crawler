@@ -4,17 +4,30 @@ from multiprocessing import Process
 from multiprocessing import Manager
 import datetime as dt
 import traceback
+import random
 import json
+import time
+import sys
 import re
 import os
 
 from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium import webdriver
+from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 import requests
+
+
+# EPOCH DATE FOR CREATING UNIX TIMESTAMPS
+EPOCH = dt.datetime.utcfromtimestamp(0)
+
+# USER AGENT INSTANCE
+# FOR GENERATING RANDOM
+# USER AGENT STRINGS
+UA = UserAgent()
 
 
 class CheckRowCount(object):
@@ -34,6 +47,11 @@ class CheckRowCount(object):
 def crawl(driver, username, start_date, end_date, column_map, procs):
     '''handler function for crawling an instagram profile'''
     print('\ncrawling {0}\'s profile'.format(username))
+
+    # SEED RANDOM NUMBER GENERATOR
+    # BEFORE CRAWLING EACH ACCOUNT
+    random.seed(unix_timestamp())
+    time.sleep(random.uniform(0.5, 3))
 
     # CHECK PROFILE INFO
     profile_info = check_profile(username, driver)
@@ -83,7 +101,9 @@ def get_post_urls(driver, start_date, shared_data):
 
         # CONTINUE IF LOAD MORE BUTTON IS NOT FOUND
         except NoSuchElementException:
-            pass
+            print('WARNING: couldn\'t find load more button')
+        except WebDriverException:
+            print('WARNING: failed to click load more button...')
 
     # GET POST URLS
     post_urls = []
@@ -109,16 +129,17 @@ def get_post_urls(driver, start_date, shared_data):
         post_date = dt.datetime.fromtimestamp(
             last_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']['taken_at_timestamp']
         )
-        print('last post date: {0}'.format(post_date.date()))
+        print('last post date: {0}'.format(post_date.date()), end='\r')
+        sys.stdout.flush()
         if post_date.date() < start_date.date():
             found_last_post = True
             break
 
         # SCROLL TO LOAD MORE PHOTOS
-        print('loading more posts...')
+        sys.stdout.flush()
         scroll(driver, 1)
         try:
-            WebDriverWait(driver, 10).until(CheckRowCount((By.CLASS_NAME, '_70iju'), row_count))
+            WebDriverWait(driver, 30).until(CheckRowCount((By.CLASS_NAME, '_70iju'), row_count))
         except TimeoutException:
             raise TimeoutException('hung loading more posts')
 
@@ -128,6 +149,7 @@ def get_post_urls(driver, start_date, shared_data):
         for post in posts:
             url = post.get_attribute('href').strip()
             print('collecting url: {0}...'.format(url), end='\r')
+            sys.stdout.flush()
             post_urls.append(url)
     return post_urls
 
@@ -185,6 +207,7 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
     for url in post_urls:
         try:
             print('scraping {0}...'.format(url), end='\r')
+            sys.stdout.flush()
 
             # GET SHARED DATA OBJECT FOR POST
             shared_data = get_post(url)
@@ -242,13 +265,25 @@ def get_post(post_url):
     retries = 0
     while retries < 5:
         try:
-            response = requests.get(post_url)
+            # RANDOM WAIT UP TO 1 SECOND
+            time.sleep(random.uniform(0.2, 1))
+
+            # SET RANDOM USER AGENT HEADER
+            headers = {'User-Agent': UA.random}
+
+            # SEND REQUEST
+            response = requests.get(post_url, headers=headers)
             soup = BeautifulSoup(response.content, 'html.parser')
             script = soup.find('script', text=re.compile('window._sharedData')).text
             shared_data = json.loads(re.search(r'{.*}', script).group(0))
             return shared_data
+
         except Exception as e:
-            print('error loading post: {0}\nretrying...'.format(post_url))
+            retries += 1
+            wait = random.randint(10, 30)
+            print('error loading post: {0}: {1}'.format(post_url, e))
+            print('retrying in {0} seconds...'.format(wait))
+            time.sleep(wait)
     raise Exception('retires exceeded loading post')
 
 
@@ -261,13 +296,25 @@ def fill_none(transformed_post):
 
 
 def scroll(driver, count):
-    '''scrolls to the bottom of the page to
-    trigger the ajax request for more photos'''
+    '''scrolls to bottom of page to
+    trigger ajax request for more photos'''
     for i in range(count):
+        # RANDOM WAIT UP TO 1 SECOND
+        time.sleep(random.uniform(0.2, 1))
+
         # SCROLL TO BOTTOM OF PAGE
         driver.execute_script(
             'window.scrollTo(0, document.body.scrollHeight);'
         )
+        # RANDOM WAIT UP TO 1/2 SECOND
+        time.sleep(random.uniform(0.2, 0.5))
+
+        # SCROLL UP A BIT
+        driver.execute_script(
+            'window.scrollTo(0, document.body.scrollHeight - 1000);'
+        )
+        # RANDOM WAIT UP TO 1 SECOND
+        time.sleep(random.uniform(0.2, 1))
     return driver
 
 
@@ -280,19 +327,6 @@ def get_chunk_size(post_num, num_processes):
     return chunk_size
 
 
-def get_driver():
-    '''creates a new webdriver instance to check post dates'''
-    driver = webdriver.PhantomJS(
-        service_log_path=os.path.devnull,
-        service_args=[
-            '--ignore-ssl-errors=true',
-            '--ssl-protocol=any',
-            '--cookies-file=/cookies.txt'
-        ]
-    )
-    return driver
-
-
 def check_profile(username, driver):
     '''gets the sharedData object from a
     profile page and checks the is_private flag'''
@@ -302,7 +336,15 @@ def check_profile(username, driver):
     shared_data = driver.execute_script(
         'return window._sharedData;'
     )
+    # RANDOM WAIT UP TO 1 SECOND
+    time.sleep(random.uniform(0.2, 1))
+
     # CHECK FOR PRIVATE PROFILE
     if shared_data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
         raise Exception('PrivateProfileError')
     return shared_data
+
+
+def unix_timestamp():
+    '''get current time as unix timestamp'''
+    return (dt.datetime.now() - EPOCH).total_seconds() * 1000.0
