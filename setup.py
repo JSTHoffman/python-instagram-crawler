@@ -7,10 +7,6 @@ import os
 dependencies = ['click', 'selenium', 'bs4', 'pandas',
                 'requests', 'fake-useragent']
 
-# MAKE OUTPUT DIRECTORY IF NONE EXISTS
-if not os.path.isdir('./output'):
-    os.makedirs('./output')
-
 setup(
     name='python-instagram-crawler',
     version='0.1.0',

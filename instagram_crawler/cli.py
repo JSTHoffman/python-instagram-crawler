@@ -221,19 +221,13 @@ def handle_exception(error, username, data, path, args, driver, home_dir):
     print('error crawling {0}\'s profile: {1}: {2}'
           .format(username, error_name, error.message))
 
-    # HANDLE USER STOPPING EXECUTION
-    # print(type(error).__name__)
-    # if type(error).__name__ == 'KeyboardInterrupt':
-    #     # HANDLE SAVING DATA
-    #     handle_save(path=path, data=data, args=args)
-
     # SAVE SCREENSHOT
-    save_screenshot(
-        error_name=error_name,
-        username=username,
-        driver=driver,
-        home_dir=home_dir
-    )
+    # save_screenshot(
+    #     error_name=error_name,
+    #     username=username,
+    #     driver=driver,
+    #     home_dir=home_dir
+    # )
 
     # SHOW TRACEBACK IF USER CHOOSES
     if click.confirm('would you like to see the stack trace?'):
