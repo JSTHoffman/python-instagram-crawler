@@ -4,17 +4,56 @@ from multiprocessing import Process
 from multiprocessing import Manager
 import datetime as dt
 import traceback
-import time
+import random
 import json
+import time
+import sys
 import re
+import os
 
 from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 import requests
 
+# PATTERN TO STRIP IMAGE URL SIGNATURES
+URL_PATTERN = re.compile(r'vp.*\/.{32}\/.{8}\/')
+
+# EPOCH DATE FOR CREATING UNIX TIMESTAMPS
+EPOCH = dt.datetime.utcfromtimestamp(0)
+
+# USER AGENT INSTANCE
+# FOR GENERATING RANDOM
+# USER AGENT STRINGS
+UA = UserAgent()
+
+
+class CheckRowCount(object):
+    '''defines the webdriver wait condition: the new
+    row count must be greater than the old row count'''
+
+    def __init__(self, locator, row_count):
+        self.locator = locator
+        self.row_count = row_count
+
+    def __call__(self, driver):
+        new_rows = driver.find_elements(*self.locator)
+        new_row_count = len(new_rows)
+        return bool(new_row_count > self.row_count)
+
 
 def crawl(driver, username, start_date, end_date, column_map, procs):
+    '''handler function for crawling an instagram profile'''
     print('\ncrawling {0}\'s profile'.format(username))
+
+    # SEED RANDOM NUMBER GENERATOR
+    # BEFORE CRAWLING EACH ACCOUNT
+    random.seed(unix_timestamp())
+    time.sleep(random.uniform(0.5, 3))
 
     # CHECK PROFILE INFO
     profile_info = check_profile(username, driver)
@@ -22,9 +61,8 @@ def crawl(driver, username, start_date, end_date, column_map, procs):
     # COLLECT POST URLs
     post_urls = get_post_urls(
         driver=driver,
-        username=username,
         start_date=start_date,
-        json_obj=profile_info
+        shared_data=profile_info
     )
 
     # CRAWL POST PAGES AND TRANSFORM DATA
@@ -39,40 +77,17 @@ def crawl(driver, username, start_date, end_date, column_map, procs):
     )
 
     print('\npulled {0} posts for {1}!'
-        .format(len(transformed_posts), username))
+          .format(len(transformed_posts), username))
     return transformed_posts
 
 
-def check_profile(username, driver):
-    # PARSE HTML TO GET SHARED DATA OBJECT (CONTAINS PROFILE INFO)
-    driver.get('https://www.instagram.com/{0}'.format(username))
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
-    pattern = re.compile('window._sharedData')
-    sharedData = soup.find('script', text=pattern).text
-    json_obj = json.loads(
-        sharedData[sharedData.find('{'):sharedData.rfind('}') + 1]
-    )
-
-    # CHECK FOR PRIVATE PROFILE
-    check_private_profile(json_obj)
-    return json_obj
-
-
-def get_post_urls(driver, username, start_date, json_obj):
+def get_post_urls(driver, start_date, shared_data):
+    '''collects URLs for posts on the profile page
+    with post dates later than start_date'''
     print('retrieving post URLs...')
-    post_urls = []
-    found_last_post = False
 
     # GET POST COUNT FROM PROFILE INFO
-    post_count = json_obj['entry_data']['ProfilePage'][0]['user']['media']['count']
-
-    # CHECK TO SEE IF OLDEST NEEDED POST IS ON THE PAGE
-    driver, found_last_post, post_rows = check_post_date(
-        driver=driver,
-        flag=found_last_post,
-        start_date=start_date,
-        post_count=post_count
-    )
+    post_count = shared_data['entry_data']['ProfilePage'][0]['user']['media']['count']
 
     # CLICK LOAD MORE BUTTON IF > 12 POSTS
     if post_count > 12:
@@ -88,60 +103,62 @@ def get_post_urls(driver, username, start_date, json_obj):
 
         # CONTINUE IF LOAD MORE BUTTON IS NOT FOUND
         except NoSuchElementException:
-            pass
+            print('WARNING: couldn\'t find load more button')
+        except WebDriverException:
+            print('WARNING: failed to click load more button...')
 
-        # SCROLL THE PAGE TO LOAD MORE POSTS
-        # UNTIL OLDEST NEEDED POST IS FOUND
-        while not found_last_post:
-            scroll(driver, 1)
-            driver, found_last_post, post_rows = check_post_date(
-                driver=driver,
-                flag=found_last_post,
-                start_date=start_date,
-                post_count=post_count
-            )
+    # GET POST URLS
+    post_urls = []
+    found_last_post = False
+    while not found_last_post:
+        post_rows = driver.find_elements_by_class_name('_70iju')
+        row_count = len(post_rows)
 
-    # PARSE ALL ROWS OF POSTS IN HTML AND GRAB URLs
+        # IF NUMBER OF POSTS (ROWS x 3) IS >= POST COUNT
+        # THEN ALL POSTS ARE DISPLAYED EVEN IF THE START
+        # DATE HASN'T BEEN REACHED
+        if row_count * 3 >= post_count:
+            found_last_post = True
+            break
+
+        # GET SHARED DATA OBJECT WITH POST INFO
+        # FOR THE LAST POST ON THE PAGE
+        last_row = post_rows[-1].find_elements_by_tag_name('a')
+        last_url = last_row[-1].get_attribute('href').encode('utf-8')
+        last_post = get_post(last_url)
+
+        # GRAB POST DATE AND CHECK TO SEE IF MORE IMAGES NEED TO BE LOADED
+        post_date = dt.datetime.fromtimestamp(
+            last_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']['taken_at_timestamp']
+        )
+        print('last post date: {0}'.format(post_date.date()), end='\r')
+        sys.stdout.flush()
+        if post_date.date() < start_date.date():
+            found_last_post = True
+            break
+
+        # SCROLL TO LOAD MORE PHOTOS
+        sys.stdout.flush()
+        scroll(driver, 1)
+        try:
+            WebDriverWait(driver, 30).until(CheckRowCount((By.CLASS_NAME, '_70iju'), row_count))
+        except TimeoutException:
+            raise TimeoutException('hung loading more posts')
+
+    # COLLECT ALL POST URLs ON THE PAGE
     for row in post_rows:
         posts = row.find_elements_by_tag_name('a')
         for post in posts:
-            url = post.get_attribute('href')
+            url = post.get_attribute('href').strip()
             print('collecting url: {0}...'.format(url), end='\r')
+            sys.stdout.flush()
             post_urls.append(url)
     return post_urls
 
 
-def check_post_date(driver, flag, start_date, post_count):
-    # PARSE HTML FOR ROWS OF POSTS CURRENTLY DISPLAYED
-    soup = BeautifulSoup(driver.page_source.encode('utf-8'), 'html.parser')
-    post_rows = driver.find_elements_by_class_name('_70iju')
-
-    # 3 POSTS PER ROW: IF ROWS x 3 > POST COUNT
-    # THEN THERE ALL THE POSTS ARE DISPLAYED
-    # EVEN IF THE END START DATE HASN'T BEEN REACHED
-    if len(post_rows) * 3 >= post_count:
-        flag = True
-
-    # GET THE URL OF THE LAST POST ON THE PAGE
-    last_row = post_rows[-1].find_elements_by_tag_name('a')
-    last_post = last_row[-1].get_attribute('href')
-    response = requests.get(last_post)
-
-    # PARSE HTML TO GET THE SHARED DATA OBJECT WITH POST INFO
-    soup = BeautifulSoup(response.content, 'html.parser')
-    sharedData = soup.find('script', text=re.compile('window._sharedData')).text
-    raw_post = json.loads(sharedData[sharedData.find('{'):sharedData.rfind('}') + 1])
-
-    # GRAB POST DATE AND CHECK TO SEE IF MORE IMAGES NEED TO BE LOADED
-    post_date = dt.datetime.fromtimestamp(
-        raw_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']['taken_at_timestamp']
-    )
-    if post_date.date() < start_date.date():
-        flag = True
-    return driver, flag, post_rows
-
-
 def chunk_transform(post_urls, start_date, end_date, column_map, num_processes):
+    '''splits post URLs into chunks to be processed in parallel'''
+
     # MULTIPROCESSING LIST OBJECT FOR COLLECTING
     # OUTPUT FROM MULTIPLE CONCURRENT PROCESSES
     transformed_posts = Manager().list()
@@ -154,10 +171,11 @@ def chunk_transform(post_urls, start_date, end_date, column_map, num_processes):
     for i in xrange(0, len(post_urls), chunk_size):
         chunks.append(post_urls[i:i + chunk_size])
 
+    print('\ncollecting post data ({0} concurrent processes)...'
+          .format(num_processes))
+
     # RUN TRANSFORM FUNCTION IN SEPARATE
     # PROCESS FOR EACH GOUP OF POST URLs
-    print('\ncollecting post data ({0} concurrent processes)...'
-        .format(num_processes))
     jobs = []
     for chunk in chunks:
         process = Process(
@@ -182,20 +200,22 @@ def chunk_transform(post_urls, start_date, end_date, column_map, num_processes):
 
 
 def transform_posts(post_urls, array, start_date, end_date, column_map):
+    '''gets the sharedData object from a post page using get_post()
+    and transforms the raw data, appending it to the
+    multiprocessing manager list'''
+
     # GET TODAY'S DATE TO CALCULATE POST LIFETIME
     today = dt.datetime.now()
     for url in post_urls:
         try:
             print('scraping {0}...'.format(url), end='\r')
+            sys.stdout.flush()
 
-            # PARSE HTML TO GET SHARED DATA OBJECT
-            response = requests.get(url)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            sharedData = soup.find('script', text=re.compile('window._sharedData')).text
-            raw_post = json.loads(sharedData[sharedData.find('{'):sharedData.rfind('}') + 1])
+            # GET SHARED DATA OBJECT FOR POST
+            shared_data = get_post(url)
 
             # POST INFO LOCATED IN THE MEDIA OBJECT IN SHARED DATA
-            raw_post = raw_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']
+            raw_post = shared_data['entry_data']['PostPage'][0]['graphql']['shortcode_media']
             post_date = dt.datetime.fromtimestamp(raw_post['taken_at_timestamp'])
 
             # TRANSFORM DATA IF POST DATE WITHIN RANGE
@@ -207,7 +227,7 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                 transformed_post['likes'] = raw_post['edge_media_preview_like']['count']
                 transformed_post['comments'] = raw_post['edge_media_to_comment']['count']
                 transformed_post['username'] = raw_post['owner']['username']
-                transformed_post['image'] = raw_post['display_url']
+                transformed_post['image'] = URL_PATTERN.sub('', raw_post['display_url'])
                 transformed_post['url'] = url
                 transformed_post['publish_date'] = post_date.strftime('%Y-%m-%d %H:%M:%S')
                 transformed_post['is_ad'] = raw_post['is_ad']
@@ -225,7 +245,7 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                 if len(raw_post['edge_media_to_caption']['edges']):
                     caption = raw_post['edge_media_to_caption']['edges'][0]['node']['text']
                     caption = caption.encode('ascii', 'ignore')
-                    transformed_post['caption'] = caption.strip(' ')
+                    transformed_post['caption'] = caption.strip()
 
                 if raw_post['location']:
                     location = raw_post['location']['name']
@@ -238,11 +258,39 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
 
         except Exception:
             print('Error retrieving post data for post: {0}\n{1}'
-                .format(url, traceback.format_exc()))
+                  .format(url, traceback.format_exc()))
+
+
+def get_post(post_url):
+    '''loads a post page and gets the
+    sharedData object with post info'''
+    retries = 0
+    while retries < 5:
+        try:
+            # RANDOM WAIT UP TO 1 SECOND
+            time.sleep(random.uniform(0.2, 1))
+
+            # SET RANDOM USER AGENT HEADER
+            headers = {'User-Agent': UA.random}
+
+            # SEND REQUEST
+            response = requests.get(post_url, headers=headers)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            script = soup.find('script', text=re.compile('window._sharedData')).text
+            shared_data = json.loads(re.search(r'{.*}', script).group(0))
+            return shared_data
+
+        except Exception as e:
+            retries += 1
+            wait = random.randint(10, 30)
+            print('error loading post: {0}: {1}'.format(post_url, e))
+            print('retrying in {0} seconds...'.format(wait))
+            time.sleep(wait)
+    raise Exception('retires exceeded loading post')
 
 
 def fill_none(transformed_post):
-    # INCASE FIELD IN RAW DATA CONTAINS EMPTY STRING
+    '''in case fields in the raw data contain empty strings'''
     for field in transformed_post:
         if transformed_post[field] == '':
             transformed_post[field] = None
@@ -250,28 +298,55 @@ def fill_none(transformed_post):
 
 
 def scroll(driver, count):
-    # SCROLL PAGE TO LOAD MORE PHOTOS
+    '''scrolls to bottom of page to
+    trigger ajax request for more photos'''
     for i in range(count):
+        # RANDOM WAIT UP TO 1 SECOND
+        time.sleep(random.uniform(0.2, 1))
+
+        # SCROLL TO BOTTOM OF PAGE
         driver.execute_script(
             'window.scrollTo(0, document.body.scrollHeight);'
         )
-        time.sleep(0.2)
+        # RANDOM WAIT UP TO 1/2 SECOND
+        time.sleep(random.uniform(0.2, 0.5))
+
+        # SCROLL UP A BIT
         driver.execute_script(
-            'window.scrollTo(0, 0);'
+            'window.scrollTo(0, document.body.scrollHeight - 1000);'
         )
-        time.sleep(0.2)
+        # RANDOM WAIT UP TO 1 SECOND
+        time.sleep(random.uniform(0.2, 1))
     return driver
 
 
 def get_chunk_size(post_num, num_processes):
-    # DIVIDE NUMBER OF POSTS BY NUMBER OF PROCESSES
+    '''determines the size of a chunk based on the number
+    of posts retrieved and the number of process used'''
     chunk_size = int(round(float(post_num) / num_processes))
     if chunk_size < 1:
         return 1
     return chunk_size
 
 
-def check_private_profile(data):
-    # CHECK PRIVATE PROFILE FLAG IN SHARED DATA OBJECT
-    if data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
+def check_profile(username, driver):
+    '''gets the sharedData object from a
+    profile page and checks the is_private flag'''
+
+    # LOAD PROFILE PAGE AND GET SHARED DATA OBJECT
+    driver.get('https://www.instagram.com/{0}'.format(username))
+    shared_data = driver.execute_script(
+        'return window._sharedData;'
+    )
+    # RANDOM WAIT UP TO 1 SECOND
+    time.sleep(random.uniform(0.2, 1))
+
+    # CHECK FOR PRIVATE PROFILE
+    if shared_data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
         raise Exception('PrivateProfileError')
+    return shared_data
+
+
+def unix_timestamp():
+    '''get current time as unix timestamp'''
+    return (dt.datetime.now() - EPOCH).total_seconds() * 1000.0

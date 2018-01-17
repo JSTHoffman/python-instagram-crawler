@@ -4,11 +4,8 @@ Crawl public Instagram profiles to collect post data.
 from setuptools import find_packages, setup
 import os
 
-dependencies = ['click', 'selenium', 'bs4', 'pandas', 'requests']
-
-# MAKE OUTPUT DIRECTORY IF NONE EXISTS
-if not os.path.isdir('./output'):
-    os.makedirs('./output')
+dependencies = ['click', 'selenium', 'beautifulsoup4', 'pandas',
+                'requests', 'fake-useragent']
 
 setup(
     name='python-instagram-crawler',
@@ -47,7 +44,7 @@ setup(
         'Operating System :: Microsoft :: Windows',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 3',
+        # 'Programming Language :: Python :: 3',
         'Topic :: Software Development :: Libraries :: Python Modules',
     ]
 )

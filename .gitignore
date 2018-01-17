@@ -3,6 +3,7 @@
 *.txt
 *.xlsx
 *.xls
+*.png
 
 dist/
 build/
