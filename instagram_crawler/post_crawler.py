@@ -11,11 +11,8 @@ import sys
 import re
 import os
 
-from selenium.common.exceptions import NoSuchElementException
-from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 import requests
