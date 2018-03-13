@@ -84,7 +84,7 @@ def get_post_urls(driver, start_date, shared_data):
     print('retrieving post URLs...')
 
     # GET POST COUNT FROM PROFILE INFO
-    post_count = shared_data['entry_data']['ProfilePage'][0]['user']['media']['count']
+    post_count = shared_data['entry_data']['ProfilePage'][0]['graphql']['user']['edge_owner_to_timeline_media']['count']
 
     # GET POST URLS
     post_urls = list()
@@ -319,7 +319,7 @@ def check_profile(username, driver):
     time.sleep(random.uniform(0.2, 1))
 
     # CHECK FOR PRIVATE PROFILE
-    if shared_data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
+    if shared_data['entry_data']['ProfilePage'][0]['graphql']['user']['is_private'] == True:
         raise Exception('PrivateProfileError')
     return shared_data
 
