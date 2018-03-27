@@ -17,9 +17,6 @@ from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 import requests
 
-# PATTERN TO STRIP IMAGE URL SIGNATURES
-URL_PATTERN = re.compile(r'vp.*\/.{32}\/.{8}\/')
-
 # EPOCH DATE FOR CREATING UNIX TIMESTAMPS
 EPOCH = dt.datetime.utcfromtimestamp(0)
 
@@ -204,7 +201,7 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                 transformed_post['likes'] = raw_post['edge_media_preview_like']['count']
                 transformed_post['comments'] = raw_post['edge_media_to_comment']['count']
                 transformed_post['username'] = raw_post['owner']['username']
-                transformed_post['image'] = URL_PATTERN.sub('', raw_post['display_url'])
+                transformed_post['image'] = raw_post['display_url']
                 transformed_post['url'] = url
                 transformed_post['publish_date'] = post_date.strftime('%Y-%m-%d %H:%M:%S')
                 transformed_post['is_ad'] = raw_post['is_ad']
