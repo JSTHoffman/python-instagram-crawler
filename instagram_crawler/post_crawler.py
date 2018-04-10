@@ -11,17 +11,11 @@ import sys
 import re
 import os
 
-from selenium.common.exceptions import NoSuchElementException
-from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 import requests
-
-# PATTERN TO STRIP IMAGE URL SIGNATURES
-URL_PATTERN = re.compile(r'vp.*\/.{32}\/.{8}\/')
 
 # EPOCH DATE FOR CREATING UNIX TIMESTAMPS
 EPOCH = dt.datetime.utcfromtimestamp(0)
@@ -32,18 +26,18 @@ EPOCH = dt.datetime.utcfromtimestamp(0)
 UA = UserAgent()
 
 
-class CheckRowCount(object):
-    '''defines the webdriver wait condition: the new
-    row count must be greater than the old row count'''
+class CheckLastPost(object):
+    '''defines the webdriver wait condition:
+    the last post on the page must have a new url'''
 
-    def __init__(self, locator, row_count):
-        self.locator = locator
-        self.row_count = row_count
+    def __init__(self, last_url):
+        self.last_url = last_url
 
     def __call__(self, driver):
-        new_rows = driver.find_elements(*self.locator)
-        new_row_count = len(new_rows)
-        return bool(new_row_count > self.row_count)
+        post_divs = driver.find_elements_by_css_selector('div._mck9w._gvoze._tn0ps')
+        new_last_post = post_divs[-1].find_element_by_tag_name('a')
+        new_last_url = new_last_post.get_attribute('href').encode('utf-8')
+        return bool(new_last_url != self.last_url)
 
 
 def crawl(driver, username, start_date, end_date, column_map, procs):
@@ -87,49 +81,38 @@ def get_post_urls(driver, start_date, shared_data):
     print('retrieving post URLs...')
 
     # GET POST COUNT FROM PROFILE INFO
-    post_count = shared_data['entry_data']['ProfilePage'][0]['user']['media']['count']
-
-    # CLICK LOAD MORE BUTTON IF > 12 POSTS
-    if post_count > 12:
-        driver.implicitly_wait(1)
-
-        # TRY TO FIND LOAD MORE BUTTON
-        # (WILL NOT BE PRESENT FOR NEWER ACCOUNTS)
-        try:
-            load_more = driver.find_element_by_xpath(
-                '//a[contains(text(), "Load more")]'
-            )
-            load_more.click()
-
-        # CONTINUE IF LOAD MORE BUTTON IS NOT FOUND
-        except NoSuchElementException:
-            print('WARNING: couldn\'t find load more button')
-        except WebDriverException:
-            print('WARNING: failed to click load more button...')
+    post_count = shared_data['entry_data']['ProfilePage'][0]['graphql']['user']['edge_owner_to_timeline_media']['count']
 
     # GET POST URLS
-    post_urls = []
+    post_urls = list()
     found_last_post = False
     while not found_last_post:
-        post_rows = driver.find_elements_by_class_name('_70iju')
-        row_count = len(post_rows)
+        post_divs = driver.find_elements_by_css_selector(
+            'div._mck9w._gvoze._tn0ps'
+        )
 
-        # IF NUMBER OF POSTS (ROWS x 3) IS >= POST COUNT
-        # THEN ALL POSTS ARE DISPLAYED EVEN IF THE START
-        # DATE HASN'T BEEN REACHED
-        if row_count * 3 >= post_count:
+        # ADD POST URLs TO LIST
+        for div in post_divs:
+            post = div.find_element_by_tag_name('a')
+            url = post.get_attribute('href').encode('utf-8')
+            if url not in post_urls:
+                post_urls.append(url)
+
+        # IF NUMBER OF POSTS IS >= POST COUNT THEN ALL POSTS ARE
+        # DISPLAYED EVEN IF THE START DATE HASN'T BEEN REACHED
+        if len(post_urls) >= post_count:
             found_last_post = True
             break
 
         # GET SHARED DATA OBJECT WITH POST INFO
         # FOR THE LAST POST ON THE PAGE
-        last_row = post_rows[-1].find_elements_by_tag_name('a')
-        last_url = last_row[-1].get_attribute('href').encode('utf-8')
+        last_url = post_urls[-1]
         last_post = get_post(last_url)
 
         # GRAB POST DATE AND CHECK TO SEE IF MORE IMAGES NEED TO BE LOADED
+        post_info = last_post['entry_data']['PostPage'][0]['graphql']
         post_date = dt.datetime.fromtimestamp(
-            last_post['entry_data']['PostPage'][0]['graphql']['shortcode_media']['taken_at_timestamp']
+            post_info['shortcode_media']['taken_at_timestamp']
         )
         print('last post date: {0}'.format(post_date.date()), end='\r')
         sys.stdout.flush()
@@ -141,18 +124,9 @@ def get_post_urls(driver, start_date, shared_data):
         sys.stdout.flush()
         scroll(driver, 1)
         try:
-            WebDriverWait(driver, 30).until(CheckRowCount((By.CLASS_NAME, '_70iju'), row_count))
+            WebDriverWait(driver, 30).until(CheckLastPost(last_url))
         except TimeoutException:
             raise TimeoutException('hung loading more posts')
-
-    # COLLECT ALL POST URLs ON THE PAGE
-    for row in post_rows:
-        posts = row.find_elements_by_tag_name('a')
-        for post in posts:
-            url = post.get_attribute('href').strip()
-            print('collecting url: {0}...'.format(url), end='\r')
-            sys.stdout.flush()
-            post_urls.append(url)
     return post_urls
 
 
@@ -227,7 +201,7 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                 transformed_post['likes'] = raw_post['edge_media_preview_like']['count']
                 transformed_post['comments'] = raw_post['edge_media_to_comment']['count']
                 transformed_post['username'] = raw_post['owner']['username']
-                transformed_post['image'] = URL_PATTERN.sub('', raw_post['display_url'])
+                transformed_post['image'] = raw_post['display_url']
                 transformed_post['url'] = url
                 transformed_post['publish_date'] = post_date.strftime('%Y-%m-%d %H:%M:%S')
                 transformed_post['is_ad'] = raw_post['is_ad']
@@ -342,7 +316,7 @@ def check_profile(username, driver):
     time.sleep(random.uniform(0.2, 1))
 
     # CHECK FOR PRIVATE PROFILE
-    if shared_data['entry_data']['ProfilePage'][0]['user']['is_private'] == True:
+    if shared_data['entry_data']['ProfilePage'][0]['graphql']['user']['is_private'] == True:
         raise Exception('PrivateProfileError')
     return shared_data
 
