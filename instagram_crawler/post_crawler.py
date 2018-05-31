@@ -25,6 +25,9 @@ EPOCH = dt.datetime.utcfromtimestamp(0)
 # USER AGENT STRINGS
 UA = UserAgent()
 
+# CLASS NAME FOR POST ELEMENTS
+POST_CLASS_NAME = 'div.v1Nh3.kIKUG._bz0w'
+
 
 class CheckLastPost(object):
     '''defines the webdriver wait condition:
@@ -34,7 +37,7 @@ class CheckLastPost(object):
         self.last_url = last_url
 
     def __call__(self, driver):
-        post_divs = driver.find_elements_by_css_selector('div._mck9w._gvoze._tn0ps')
+        post_divs = driver.find_elements_by_css_selector(POST_CLASS_NAME)
         new_last_post = post_divs[-1].find_element_by_tag_name('a')
         new_last_url = new_last_post.get_attribute('href').encode('utf-8')
         return bool(new_last_url != self.last_url)
@@ -87,9 +90,7 @@ def get_post_urls(driver, start_date, shared_data):
     post_urls = list()
     found_last_post = False
     while not found_last_post:
-        post_divs = driver.find_elements_by_css_selector(
-            'div._mck9w._gvoze._tn0ps'
-        )
+        post_divs = driver.find_elements_by_css_selector(POST_CLASS_NAME)
 
         # ADD POST URLs TO LIST
         for div in post_divs:
