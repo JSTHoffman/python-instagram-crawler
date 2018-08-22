@@ -185,7 +185,7 @@ def get_driver():
         service_log_path=os.path.devnull,
         service_args=[
             '--ignore-ssl-errors=true',
-            '--ssl-protocol=any'
+            '--ssl-protocol=any',
             '--cookies-file={0}'.format(cookie_path)
         ]
     )
