@@ -44,9 +44,9 @@ def main(usernames, procs):
 
     # LOAD COLUMN MAP
     home_directory = os.path.expanduser('~')
-    map_path = '{0}/apps/cli_tools/python-instagram-crawler/' \
+    map_path = 'apps/cli_tools/python-instagram-crawler/' \
                'instagram_crawler/column_map.json'
-    map_path = map_path.format(home_directory)
+    map_path = os.path.join(home_directory, map_path)
 
     with open(map_path) as json_file:
         column_map = json.load(json_file)
@@ -62,18 +62,27 @@ def main(usernames, procs):
         out_path = args['input_file'][:input_dir]
     else:
         usernames = args['accounts']
-        out_path = '{0}/apps/cli_tools/python-instagram-crawler' \
-                   '/output'.format(home_directory)
+        out_path = os.path.join(
+            home_directory,
+            'apps/cli_tools/python-instagram-crawler/output'
+        )
+
+    # GET PHANTOMJS EXECUTABLE DIRECTORY
+    executable_path = os.path.join(
+        home_directory,
+        'apps/cli_tools/python-instagram-crawler/bin'
+    )
 
     # ADD PHANTOMJS EXECUTABLE TO PATH
     if 'phantomjs' not in os.environ['PATH']:
         print('adding phantomjs executable to PATH...')
-        os.environ['PATH'] += ':{0}/bin'.format(os.getcwd())
+        os.environ['PATH'] += ':{0}'.format(executable_path)
 
     for username in usernames:
         try:
             # CREATE PHANTOMJS WEBDRIVER
-            driver = get_driver()
+            driver = None
+            driver = get_driver(home_directory)
 
             # RANDOM WAIT UP TO 1 SECOND
             random.seed(post_crawler.unix_timestamp())
@@ -167,7 +176,7 @@ def user_input(usernames):
     return inputs
 
 
-def get_driver():
+def get_driver(home_dir):
     '''creates a new webdriver instance to check post dates'''
     # GET RANDOM USER AGENT STRING
     user_agent = post_crawler.UA.random
@@ -180,7 +189,10 @@ def get_driver():
 
     # CREATE WEBDRIVER
     # print('creating webdriver...')
-    cookie_path = '{0}/apps/cli_tools/python-instagram-crawler/cookies.txt'
+    cookie_path = os.path.join(
+        home_dir,
+        'apps/cli_tools/python-instagram-crawler/cookies.txt'
+    )
     driver = webdriver.PhantomJS(
         service_log_path=os.path.devnull,
         service_args=[
@@ -247,8 +259,8 @@ def handle_exception(error, username, data, path, args, driver, home_dir):
 def save_screenshot(error_name, username, driver, home_dir):
     timestamp = dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     file_name = '{0}_error_{1}_{2}.png'.format(username, error_name, timestamp)
-    error_dir = '{0}/apps/cli_tools/python-instagram-crawler/errors/'
-    error_path = error_dir.format(home_dir) + file_name
+    error_dir = 'apps/cli_tools/python-instagram-crawler/errors/'
+    error_path = os.path.join(home_dir, error_dir, file_name)
     driver.save_screenshot(error_path)
     print('screenshot saved to {0}'.format(error_path))
 
