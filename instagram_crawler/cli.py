@@ -73,6 +73,7 @@ def main(usernames, procs):
     for username in usernames:
         try:
             # CREATE PHANTOMJS WEBDRIVER
+            driver = None
             driver = get_driver()
 
             # RANDOM WAIT UP TO 1 SECOND
