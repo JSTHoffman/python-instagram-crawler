@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 import os
 
 dependencies = ['click', 'selenium', 'beautifulsoup4', 'pandas',
-                'numpy==1.14.3', 'requests', 'fake-useragent']
+                'numpy==1.14.3', 'requests', 'fake-useragent>=0.1.11']
 
 setup(
     name='python-instagram-crawler',
