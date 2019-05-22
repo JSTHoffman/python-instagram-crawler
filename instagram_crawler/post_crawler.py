@@ -200,7 +200,7 @@ def transform_posts(post_urls, array, start_date, end_date, column_map):
                 transformed_post['channel'] = 'instagram'
                 transformed_post['post_id'] = raw_post['shortcode']
                 transformed_post['likes'] = raw_post['edge_media_preview_like']['count']
-                transformed_post['comments'] = raw_post['edge_media_to_comment']['count']
+                transformed_post['comments'] = raw_post['edge_media_to_parent_comment']['count']
                 transformed_post['username'] = raw_post['owner']['username']
                 transformed_post['image'] = raw_post['display_url']
                 transformed_post['url'] = url
